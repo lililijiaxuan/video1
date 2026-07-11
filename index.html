@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频播放器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            /* 莫兰迪浅渐变背景 */
+            background: linear-gradient(135deg, #f3eee9 0%, #e4e9f0 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 960px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
+            /* 莫兰迪灰调柔和阴影 */
+            box-shadow: 0 20px 60px rgba(92, 84, 80, 0.18);
+            cursor: pointer;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: cover;
+        }
+
+        /* 播放按钮遮罩层 - 莫兰迪灰调半透明 */
+        .play-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(88, 82, 78, 0.22);
+            backdrop-filter: blur(2px);
+            transition: opacity 0.4s ease, background 0.3s ease;
+            z-index: 2;
+        }
+
+        .video-container.playing .play-overlay {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .play-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            /* 莫兰迪奶白色按钮 */
+            background: rgba(248, 245, 242, 0.95);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 8px 30px rgba(80, 72, 68, 0.25);
+        }
+
+        .play-btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 12px 40px rgba(80, 72, 68, 0.35);
+        }
+
+        .play-btn svg {
+            width: 28px;
+            height: 28px;
+            /* 莫兰迪深灰棕图标 */
+            fill: #5c5450;
+            margin-left: 4px;
+        }
+
+        /* 底部进度条 - 莫兰迪渐变遮罩 */
+        .controls-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 24px;
+            background: linear-gradient(to top, rgba(70, 64, 60, 0.6), transparent);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            z-index: 3;
+        }
+
+        .video-container:hover .controls-bar,
+        .video-container.playing:hover .controls-bar {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .progress {
+            width: 100%;
+            height: 4px;
+            background: rgba(248, 245, 242, 0.3);
+            border-radius: 2px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .progress-filled {
+            height: 100%;
+            width: 0%;
+            /* 莫兰迪奶白进度条 */
+            background: #f8f5f2;
+            border-radius: 2px;
+            transition: width 0.1s linear;
+        }
+
+        .time-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            color: rgba(248, 245, 242, 0.9);
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        /* 视频封面占位 - 莫兰迪深色渐变 */
+        .video-poster {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #8a817c 0%, #7d8a99 100%);
+            z-index: 1;
+        }
+
+        .video-container.playing .video-poster {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container" id="videoContainer">
+        <div class="video-poster"></div>
+        
+        <video id="video" preload="metadata">
+            <source src="视频1.mp4" type="video/mp4">
+            您的浏览器不支持视频播放
+        </video>
+
+        <div class="play-overlay" id="playOverlay">
+            <button class="play-btn" id="playBtn" aria-label="播放视频">
+                <svg viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="controls-bar">
+            <div class="progress" id="progress">
+                <div class="progress-filled" id="progressFilled"></div>
+            </div>
+            <div class="time-row">
+                <span id="currentTime">0:00</span>
+                <span id="duration">0:00</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const videoContainer = document.getElementById('videoContainer');
+        const playBtn = document.getElementById('playBtn');
+        const playOverlay = document.getElementById('playOverlay');
+        const progress = document.getElementById('progress');
+        const progressFilled = document.getElementById('progressFilled');
+        const currentTimeEl = document.getElementById('currentTime');
+        const durationEl = document.getElementById('duration');
+
+        // 格式化时间
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // 切换播放/暂停
+        function togglePlay() {
+            if (video.paused) {
+                video.play();
+                videoContainer.classList.add('playing');
+            } else {
+                video.pause();
+                videoContainer.classList.remove('playing');
+            }
+        }
+
+        playBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            togglePlay();
+        });
+
+        videoContainer.addEventListener('click', togglePlay);
+
+        // 加载元数据
+        video.addEventListener('loadedmetadata', () => {
+            durationEl.textContent = formatTime(video.duration);
+        });
+
+        // 更新进度条
+        video.addEventListener('timeupdate', () => {
+            const percent = (video.currentTime / video.duration) * 100;
+            progressFilled.style.width = `${percent}%`;
+            currentTimeEl.textContent = formatTime(video.currentTime);
+        });
+
+        // 点击进度条跳转
+        progress.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const rect = progress.getBoundingClientRect();
+            const percent = (e.clientX - rect.left) / rect.width;
+            video.currentTime = percent * video.duration;
+        });
+
+        // 视频结束重置
+        video.addEventListener('ended', () => {
+            videoContainer.classList.remove('playing');
+        });
+    </script>
+</body>
+</html>
